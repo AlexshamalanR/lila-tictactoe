@@ -78,6 +78,17 @@ class Nakama {
         await this.socket.sendMatchState(this.matchId, OpCode.MOVE, JSON.stringify(data));
         console.log("Match data sent");
     }
+
+    async leaveMatch(): Promise<void> {
+        if (!this.socket || !this.matchId) {
+            console.log("Socket or matchId not found");
+            return;
+        }
+        await this.socket.leaveMatch(this.matchId);
+        this.matchId = null;
+        this.gameState = new GameState();
+        console.log("Left match");
+    }
 }
 
 export default Nakama;

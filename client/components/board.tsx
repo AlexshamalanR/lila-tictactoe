@@ -12,16 +12,119 @@ import {
 
 import { Button } from '@/components/ui/button';
 
-export default function Game() {
-  const [squares, setSquares] = useState<(number | null)[]>(
-    Array(9).fill(null)
+type GameState = {
+  squares: (number | null)[];
+  playerIndex: number;
+  playerTurn: number;
+  deadline: number | null;
+  gameMessage: string;
+  gameStarted: boolean;
+  timeLeft: number;
+  isSearching: boolean;
+};
+
+// GameStatus component removed as it's now inline in the main component
+
+const FindMatchButton = ({ onClick, isSearching }: { 
+  onClick: () => void; 
+  isSearching: boolean;
+}) => (
+  <button
+    onClick={onClick}
+    disabled={isSearching}
+    className="game-button"
+  >
+    {isSearching ? (
+      <span className="flex items-center gap-3">
+        <div className="loading-spinner"></div>
+        Finding Match...
+      </span>
+    ) : (
+      'Find Match'
+    )}
+  </button>
+);
+
+const GameBoard = ({ squares, onSquareClick, isMyTurn }: {
+  squares: (number | null)[];
+  onSquareClick: (index: number) => void;
+  isMyTurn: boolean;
+}) => {
+  const renderSquare = (index: number) => (
+    <Square
+      key={index}
+      value={squares[index]}
+      onSquareClick={() => onSquareClick(index)}
+      isClickable={isMyTurn && squares[index] === null}
+    />
   );
-  const [playerIndex, setPlayerIndex] = useState<number>(-1);
-  const [playerTurn, setPlayerTurn] = useState<number>(-1);
-  const [deadline, setDeadline] = useState<number | null>(null);
-  const [gameMessage, setMessage] = useState<string>('Welcome to TicTacToe');
-  const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [timeLeft, setTimeLeft] = useState<number>(0);
+
+  return (
+    <div className="board-row">
+      <div className="game-lines">
+        <div className="horizontal-line" />
+        <div className="horizontal-line" />
+      </div>
+      {squares.map((_, index) => renderSquare(index))}
+    </div>
+  );
+};
+
+const GameModeSelector = ({ selectedMode, onModeSelect }: {
+  selectedMode: 'fast' | 'normal';
+  onModeSelect: (mode: 'fast' | 'normal') => void;
+}) => (
+  <div className="game-mode-selector">
+    <button
+      className={`game-mode-button ${selectedMode === 'normal' ? 'active' : ''}`}
+      onClick={() => onModeSelect('normal')}
+    >
+      Normal Mode
+      <div className="text-sm opacity-70">20s per turn</div>
+    </button>
+    <button
+      className={`game-mode-button ${selectedMode === 'fast' ? 'active' : ''}`}
+      onClick={() => onModeSelect('fast')}
+    >
+      Fast Mode
+      <div className="text-sm opacity-70">10s per turn</div>
+    </button>
+  </div>
+);
+
+const EndGameActions = ({ onPlayAgain, onLeave }: {
+  onPlayAgain: () => void;
+  onLeave: () => void;
+}) => (
+  <div className="end-game-actions">
+    <button className="end-game-button primary" onClick={onPlayAgain}>
+      Play Again
+    </button>
+    <button className="end-game-button secondary" onClick={onLeave}>
+      Leave Game
+    </button>
+  </div>
+);
+
+export default function Game() {
+  const [gameState, setGameState] = useState<GameState>({
+    squares: Array(9).fill(null),
+    playerIndex: -1,
+    playerTurn: -1,
+    deadline: null,
+    gameMessage: 'Welcome to TicTacToe',
+    gameStarted: false,
+    timeLeft: 0,
+    isSearching: false
+  });
+  
+  const [gameMode, setGameMode] = useState<'fast' | 'normal'>('normal');
+  const [gameEnded, setGameEnded] = useState(false);
+
+  const updateGameState = (updates: Partial<GameState>) => {
+    setGameState(current => ({ ...current, ...updates }));
+  };
+
   const nakamaRef = useRef<Nakama | undefined>(undefined);
 
   function initSocket() {
@@ -47,15 +150,17 @@ export default function Game() {
         switch (matchState.op_code) {
           case OpCode.START:
             const startMessage = json as StartMessage;
-            setTimeLeft(0);
-            setSquares(startMessage.board);
-            setPlayerTurn(startMessage.mark);
-            setGameStarted(true);
-            setMessage('Game Started!');
+            updateGameState({
+              timeLeft: 0,
+              squares: startMessage.board,
+              playerTurn: startMessage.mark,
+              gameStarted: true,
+              gameMessage: 'Game Started!'
+            });
 
             let tmpId = startMessage.marks[userId!];
             if (tmpId !== null) {
-              setPlayerIndex(tmpId);
+              updateGameState({ playerIndex: tmpId });
               nakamaRef.current.gameState.playerIndex = tmpId;
             } else {
               console.error('tmpId is null');
@@ -63,24 +168,22 @@ export default function Game() {
             break;
           case OpCode.UPDATE:
             const updateMessage = json as UpdateMessage;
-            if (updateMessage.mark === myPlayerIndex) {
-              setMessage('Your Turn!');
-            }
-            setPlayerTurn(updateMessage.mark);
-            setSquares(updateMessage.board);
-            setDeadline(updateMessage.deadline);
+            updateGameState({
+              gameMessage: updateMessage.mark === myPlayerIndex ? 'Your Turn!' : gameState.gameMessage,
+              playerTurn: updateMessage.mark,
+              squares: updateMessage.board,
+              deadline: updateMessage.deadline
+            });
             break;
           case OpCode.DONE:
             const doneMessage = json as DoneMessage;
-            setDeadline(doneMessage.nextGameStart);
-            setGameStarted(false);
-            setSquares(doneMessage.board);
-            setPlayerTurn(-1);
-            if (doneMessage.winner === myPlayerIndex) {
-              setMessage('You won!');
-            } else {
-              setMessage('You lost!');
-            }
+            updateGameState({
+              deadline: doneMessage.nextGameStart,
+              gameStarted: false,
+              squares: doneMessage.board,
+              playerTurn: -1,
+              gameMessage: doneMessage.winner === myPlayerIndex ? 'You won!' : 'You lost!'
+            });
             break;
           case OpCode.MOVE:
             // Handle MOVE message
@@ -106,106 +209,130 @@ export default function Game() {
   }, []);
 
   useEffect(() => {
-    if (deadline !== null) {
+    if (gameState.deadline !== null) {
       const intervalId = setInterval(() => {
-        setTimeLeft(deadline * 1000 - Date.now());
+        updateGameState({
+          timeLeft: gameState.deadline! * 1000 - Date.now()
+        });
       }, 1000);
       return () => clearInterval(intervalId);
     }
-  }, [deadline]);
+  }, [gameState.deadline]);
 
   function handleClick(i: number) {
-    if (!gameStarted) {
-      setMessage("Game hasn't started yet!");
+    if (!gameState.gameStarted) {
+      updateGameState({ gameMessage: "Game hasn't started yet!" });
       return;
     }
     if (!nakamaRef.current) return;
 
-    if (playerTurn === playerIndex && squares[i] === null) {
-      const nextSquares = squares.slice();
-
-      nextSquares[i] = playerIndex;
-      setSquares(nextSquares);
+    if (gameState.playerTurn === gameState.playerIndex && gameState.squares[i] === null) {
+      const nextSquares = gameState.squares.slice();
+      nextSquares[i] = gameState.playerIndex;
+      
+      updateGameState({
+        squares: nextSquares,
+        gameMessage: "Wait for other player's turn!"
+      });
+      
       nakamaRef.current.makeMove(i);
-      setMessage("Wait for other player's turn!");
-    } else if (playerTurn !== playerIndex) {
-      setMessage("It's not your turn!");
+    } else if (gameState.playerTurn !== gameState.playerIndex) {
+      updateGameState({ gameMessage: "It's not your turn!" });
     }
   }
 
   async function findMatch() {
     if (!nakamaRef.current) return;
+    updateGameState({ isSearching: true });
     await nakamaRef.current.findMatch();
+    
     if (nakamaRef.current.matchId === null) {
-      setMessage('Server Error:Failed to find match!');
+      updateGameState({
+        isSearching: false,
+        gameMessage: 'Server Error: Failed to find match!'
+      });
+      return;
     }
+    
     console.log('find match, matchId: ', nakamaRef.current.matchId!);
-    setMessage('Wait Other Player to join...');
+    updateGameState({
+      isSearching: false,
+      gameMessage: 'Wait Other Player to join...'
+    });
   }
 
+  const isMyTurn = gameState.playerTurn === gameState.playerIndex;
+  
+  // Format timer to always show positive numbers
   return (
-    <>
-      <div className='board-row'>
-        <div>{gameMessage}</div>
-      </div>
-      <div className='board-row'>
-        <Button onClick={findMatch}>Find Match</Button>
-      </div>
-      {gameStarted && (
-        <div className='flex items-center justify-center space-x-3'>
-          <div className='w-36 rounded-lg bg-gray-700 px-4 py-1 text-xl font-medium text-white'>
-            You are
-            <span
-              className={`${
-                playerIndex === 0 ? 'text-[#30c4bd]' : 'px-2 text-[#f3b236]'
-              } text-2xl font-bold`}
-            >
-              {playerIndex === 0 ? 'X' : 'O'}
-            </span>{' '}
-          </div>
-          <div>
-            <div className='w-28 rounded-lg bg-gray-700 px-4 py-1 text-xl font-medium uppercase text-white'>
-              <span
-                className={`${
-                  playerTurn === 0 ? 'text-[#30c4bd]' : 'text-[#f3b236]'
-                } text-2xl font-bold`}
-              >
-                {playerTurn === 0 ? 'X' : 'O'}
-              </span>{' '}
-              Turn
+    <div className="min-h-screen bg-background pt-16 px-4">
+      <div className="max-w-[390px] mx-auto flex flex-col items-center">
+        <div className="w-full text-center mb-8">
+          <h2 className="game-header mb-4">{gameState.gameMessage}</h2>
+          {gameState.deadline && gameState.gameStarted && (
+            <div className="timer-container">
+              <div className="flex justify-center items-center gap-3">
+                <span className="text-muted-foreground text-lg">Time left:</span>
+                <span className="timer-display">
+                  {(Math.max(0, gameState.timeLeft) / 1000).toFixed(2)}s
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
 
-      {deadline !== null && (
-        <div className='text-center'>
-          <div className='text-sm text-gray-500'>
-            {gameStarted ? 'Time left:' : 'Game will start after: '}
+        {!gameState.gameStarted && (
+          <div className="mb-12">
+            <FindMatchButton
+              onClick={findMatch}
+              isSearching={gameState.isSearching}
+            />
           </div>
-          <div className='text-2xl font-bold'>
-            {timeLeft > 0
-              ? new Date(timeLeft).toISOString().substr(14, 5)
-              : '0:00'}
-          </div>
-        </div>
-      )}
+        )}
 
-      <div className='board-row'>
-        <Square value={squares[0]} onSquareClick={() => handleClick(0)} />
-        <Square value={squares[1]} onSquareClick={() => handleClick(1)} />
-        <Square value={squares[2]} onSquareClick={() => handleClick(2)} />
+        <GameBoard
+          squares={gameState.squares}
+          onSquareClick={handleClick}
+          isMyTurn={isMyTurn}
+        />
+
+        {!gameState.isSearching && !gameState.gameStarted && gameState.playerTurn === -1 && (
+          <div className="w-full mt-4">
+            <EndGameActions
+              onPlayAgain={() => {
+                // Handle play again action
+                updateGameState({
+                  squares: Array(9).fill(null),
+                  playerIndex: -1,
+                  playerTurn: -1,
+                  deadline: null,
+                  gameMessage: 'Welcome to TicTacToe',
+                  gameStarted: false,
+                  timeLeft: 0,
+                  isSearching: false
+                });
+              }}
+              onLeave={async () => {
+                // Handle leave game action
+                if (nakamaRef.current?.socket && nakamaRef.current?.matchId) {
+                  await nakamaRef.current.socket.leaveMatch(nakamaRef.current.matchId);
+                  nakamaRef.current.matchId = null;
+                }
+                updateGameState({
+                  squares: Array(9).fill(null),
+                  playerIndex: -1,
+                  playerTurn: -1,
+                  deadline: null,
+                  gameMessage: 'Welcome to TicTacToe',
+                  gameStarted: false,
+                  timeLeft: 0,
+                  isSearching: false
+                });
+              }}
+            />
+          </div>
+        )}
       </div>
-      <div className='board-row'>
-        <Square value={squares[3]} onSquareClick={() => handleClick(3)} />
-        <Square value={squares[4]} onSquareClick={() => handleClick(4)} />
-        <Square value={squares[5]} onSquareClick={() => handleClick(5)} />
-      </div>
-      <div className='board-row'>
-        <Square value={squares[6]} onSquareClick={() => handleClick(6)} />
-        <Square value={squares[7]} onSquareClick={() => handleClick(7)} />
-        <Square value={squares[8]} onSquareClick={() => handleClick(8)} />
-      </div>
-    </>
+    </div>
   );
 }

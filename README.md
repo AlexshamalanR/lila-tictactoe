@@ -1,57 +1,154 @@
-# xoxo-nextjs-nakama
+# TicTacToe Multiplayer Game
 
-A simple Tic-Tac-Toe/xoxo multiplayer online game build with nextjs and nakama
+A modern multiplayer Tic-Tac-Toe game built with Next.js and Nakama server, featuring real-time gameplay and matchmaking.
 
-<h1 align="center">
-  <img src="demo.png" style="height: 400px;"alt="tic-tac-toe">
-</h1>
+## Features
 
-# tutorial
+- Real-time multiplayer gameplay
+- Automatic matchmaking
+- Turn-based gameplay with timer
+- Beautiful UI with dark mode
+- Responsive design for all devices
 
-## nakama
+## Local Development Setup
 
-- video
-  - [Nakama Client Side Tutorial (js)](https://www.youtube.com/watch?v=nbvVNmwjOrA)
-  - [Nakama Server Runtime Code Project Setup using TypeScript](https://www.youtube.com/watch?v=FXguREV6Zf8)
-- document
-  - [nakama server](https://heroiclabs.com/docs/nakama/concepts/multiplayer/authoritative/)
+### Prerequisites
 
-# Usage
+- Node.js 16+ and pnpm (or npm/yarn)
+- Docker and Docker Compose
+- Git
 
-## client
+### 1. Clone the Repository
 
-template from https://github.com/shadcn-ui/next-template
-
-```
-cd clien && cp .env.example .env.local
-cd client && pnpm install
-cd client && pnpm run dev
+```bash
+git clone https://github.com/AlexshamalanR/lila-tictactoe.git
+cd lila-tictactoe
 ```
 
-## server
+### 2. Client Setup
 
-template from https://github.com/heroiclabs/nakama-project-template
+```bash
+# Navigate to client directory
+cd client
 
+# Copy environment file
+cp .env.example .env.local
+
+# Install dependencies
+pnpm install
+
+# Start development server
+pnpm run dev
 ```
-# if you want to yarn or pnpm, you should also change Dockerfile
-cd server && npm install
-cd server && docker-compose up
 
-# when change source code, rebuild docker
-cd server && docker-compose up --build
+The client will be available at `http://localhost:3000`
+
+### 3. Server Setup
+
+```bash
+# Navigate to server directory
+cd server
+
+# Install dependencies
+npm install
+
+# Start the Nakama server using Docker
+docker-compose up
 ```
 
-### port
+The Nakama server will start with the following ports:
 
-- "7349": gRPC API server
-- "7350": HTTP API server
-- "7351": http://127.0.0.1:7351 : nakama console (web ui)
-  - username and password can set in `/data/my-config.yml`
+- Game Server API: `7350`
+- gRPC API: `7349`
+- Admin Console: `http://localhost:7351`
 
-# deploy
+Default admin credentials (configurable in `/data/my-config.yml`):
 
+- Username: `admin`
+- Password: `password`
+
+## Production Deployment
+
+### Server Deployment
+
+1. Prepare your server (Ubuntu/Debian recommended)
+
+```bash
+# Install Docker and Docker Compose
+sudo apt update
+sudo apt install docker.io docker-compose
 ```
-# edit .env.production
-cd client && pnpm run build && pnpm run start
-cd server && docker-compose up -d
+
+2. Deploy Nakama Server
+
+```bash
+# Navigate to server directory
+cd server
+
+# Create and edit production configuration
+cp data/my-config.yml data/production.yml
+nano data/production.yml  # Edit configuration as needed
+
+# Start server in production mode
+docker-compose -f docker-compose.prod.yml up -d
 ```
+
+### Client Deployment
+
+1. Set up production environment
+
+```bash
+# Navigate to client directory
+cd client
+
+# Create and edit production environment
+cp .env.example .env.production
+nano .env.production  # Update with your production server details
+```
+
+2. Build and deploy
+
+```bash
+# Build the application
+pnpm run build
+
+# Start production server
+pnpm run start
+```
+
+Alternatively, you can deploy the client to platforms like Vercel:
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy to Vercel
+vercel
+```
+
+## Playing the Game
+
+1. Open the game in your browser
+2. Click "Play Now" to start
+3. Click "Find Match" to enter matchmaking
+4. Wait for an opponent to join
+5. Play your turn when highlighted
+6. Game ends when someone wins or it's a draw
+
+## Common Issues & Troubleshooting
+
+### Server Issues
+
+- Ensure Docker is running and ports 7349-7351 are available
+- Check server logs: `docker-compose logs -f`
+- Verify database connection in admin console
+
+### Client Issues
+
+- Clear browser cache if UI is not updating
+- Check console for any connection errors
+- Verify environment variables are set correctly
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

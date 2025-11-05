@@ -15,8 +15,8 @@ export const siteConfig = {
     },
   ],
   links: {
-    twitter: "https://twitter.com/realjackiexiao",
-    github: "https://github.com/Jackiexiao/xoxo-nextjs-nakama",
+    linkedin: "https://www.linkedin.com/in/alex-shamalan-r/",
+    github: "https://github.com/AlexshamalanR/lila-tictactoe",
     docs: "https://ui.shadcn.com",
   },
 }

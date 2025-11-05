@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Square from './square';
 import { MatchData } from '@heroiclabs/nakama-js';
 import Nakama from '@/lib/nakama';
@@ -92,21 +93,47 @@ const GameModeSelector = ({ selectedMode, onModeSelect }: {
   </div>
 );
 
-const EndGameActions = ({ onPlayAgain, onLeave }: {
+const GameActions = ({ gameState, gameEnded, onFindMatch, onPlayAgain, onLeave }: {
+  gameState: GameState;
+  gameEnded: boolean;
+  onFindMatch: () => void;
   onPlayAgain: () => void;
   onLeave: () => void;
-}) => (
-  <div className="end-game-actions">
-    <button className="end-game-button primary" onClick={onPlayAgain}>
-      Play Again
-    </button>
-    <button className="end-game-button secondary" onClick={onLeave}>
-      Leave Game
-    </button>
-  </div>
-);
+}) => {
+  // Show loading spinner while searching
+  if (gameState.isSearching) {
+    return <div className="loading-spinner-large mb-12"></div>;
+  }
+
+  // Show Play Again and Leave buttons after game ends
+  if (gameEnded) {
+    return (
+      <div className="mt-12 space-y-4">
+        <Button onClick={onPlayAgain} variant="outline" className="w-full">
+          Play Again
+        </Button>
+        <Button onClick={onLeave} variant="outline" className="w-full">
+          Leave
+        </Button>
+      </div>
+    );
+  }
+
+  // Show Find Game button only at start or after leaving
+  if (!gameState.gameStarted && !gameEnded) {
+    return (
+      <div className="mb-12">
+        <FindMatchButton onClick={onFindMatch} isSearching={gameState.isSearching} />
+      </div>
+    );
+  }
+
+  // Hide all buttons during active game
+  return null;
+};
 
 export default function Game() {
+  const router = useRouter();
   const [gameState, setGameState] = useState<GameState>({
     squares: Array(9).fill(null),
     playerIndex: -1,
@@ -177,12 +204,14 @@ export default function Game() {
             break;
           case OpCode.DONE:
             const doneMessage = json as DoneMessage;
+            setGameEnded(true);
             updateGameState({
-              deadline: doneMessage.nextGameStart,
+              deadline: null,
               gameStarted: false,
               squares: doneMessage.board,
               playerTurn: -1,
-              gameMessage: doneMessage.winner === myPlayerIndex ? 'You won!' : 'You lost!'
+              gameMessage: doneMessage.winner === myPlayerIndex ? 'You won!' : 'You lost!',
+              isSearching: false
             });
             break;
           case OpCode.MOVE:
@@ -281,56 +310,91 @@ export default function Game() {
           )}
         </div>
 
-        {!gameState.gameStarted && (
-          <div className="mb-12">
-            <FindMatchButton
-              onClick={findMatch}
-              isSearching={gameState.isSearching}
-            />
-          </div>
-        )}
+        <GameActions
+          gameState={gameState}
+          gameEnded={gameEnded}
+          onFindMatch={findMatch}
+          onPlayAgain={async () => {
+            try {
+              // First leave current match if in one
+              if (nakamaRef.current?.socket && nakamaRef.current?.matchId) {
+                await nakamaRef.current.socket.leaveMatch(nakamaRef.current.matchId);
+                nakamaRef.current.matchId = null;
+                nakamaRef.current.gameState.playerIndex = -1;
+              }
 
-        <GameBoard
-          squares={gameState.squares}
-          onSquareClick={handleClick}
-          isMyTurn={isMyTurn}
+              // Reset the game state and start searching
+              updateGameState({
+                squares: Array(9).fill(null),
+                playerIndex: -1,
+                playerTurn: -1,
+                deadline: null,
+                gameMessage: 'Finding new match...',
+                gameStarted: false,
+                timeLeft: 0,
+                isSearching: true
+              });
+              setGameEnded(false);
+              
+              // Find new match
+              await findMatch();
+            } catch (error) {
+              updateGameState({
+                isSearching: false,
+                gameMessage: 'Error finding match. Please try again.'
+              });
+            }
+          }}
+          onLeave={async () => {
+            try {
+              // First leave the current match
+              if (nakamaRef.current?.socket && nakamaRef.current?.matchId) {
+                await nakamaRef.current.socket.leaveMatch(nakamaRef.current.matchId);
+                nakamaRef.current.matchId = null;
+                nakamaRef.current.gameState.playerIndex = -1;
+              }
+
+              // Reset everything to initial state
+              setGameEnded(false);
+              updateGameState({
+                squares: Array(9).fill(null),
+                playerIndex: -1,
+                playerTurn: -1,
+                deadline: null,
+                gameMessage: 'Welcome to TicTacToe',
+                gameStarted: false,
+                timeLeft: 0,
+                isSearching: false
+              });
+
+              // Navigate to home page
+              router.push('/');
+            } catch (error) {
+              console.error('Error leaving game:', error);
+              // Still try to reset the UI state and navigate even if there's an error
+              setGameEnded(false);
+              updateGameState({
+                squares: Array(9).fill(null),
+                playerIndex: -1,
+                playerTurn: -1,
+                deadline: null,
+                gameMessage: 'Welcome to TicTacToe',
+                gameStarted: false,
+                timeLeft: 0,
+                isSearching: false
+              });
+              // Navigate to home page even if there's an error
+              router.push('/');
+            }
+          }}
         />
 
-        {!gameState.isSearching && !gameState.gameStarted && gameState.playerTurn === -1 && (
-          <div className="w-full mt-4">
-            <EndGameActions
-              onPlayAgain={() => {
-                // Handle play again action
-                updateGameState({
-                  squares: Array(9).fill(null),
-                  playerIndex: -1,
-                  playerTurn: -1,
-                  deadline: null,
-                  gameMessage: 'Welcome to TicTacToe',
-                  gameStarted: false,
-                  timeLeft: 0,
-                  isSearching: false
-                });
-              }}
-              onLeave={async () => {
-                // Handle leave game action
-                if (nakamaRef.current?.socket && nakamaRef.current?.matchId) {
-                  await nakamaRef.current.socket.leaveMatch(nakamaRef.current.matchId);
-                  nakamaRef.current.matchId = null;
-                }
-                updateGameState({
-                  squares: Array(9).fill(null),
-                  playerIndex: -1,
-                  playerTurn: -1,
-                  deadline: null,
-                  gameMessage: 'Welcome to TicTacToe',
-                  gameStarted: false,
-                  timeLeft: 0,
-                  isSearching: false
-                });
-              }}
-            />
-          </div>
+        {gameState.gameStarted && (
+          <GameBoard
+            squares={gameState.squares}
+            onSquareClick={handleClick}
+            isMyTurn={isMyTurn}
+          />
         )}
       </div>
     </div>

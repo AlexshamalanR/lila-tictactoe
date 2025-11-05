@@ -2,6 +2,17 @@
 
 A modern multiplayer Tic-Tac-Toe game built with Next.js and Nakama server, featuring real-time gameplay and matchmaking.
 
+---
+
+## 🚀 Play the Game
+
+👉 **[Click here to play now!](http://13.233.119.233:3000/)**
+
+🔹 Live Demo: **http://13.233.119.233:3000/**  
+Challenge your friends or get matched instantly with another player online!
+
+---
+
 ## Features
 
 - Real-time multiplayer gameplay
